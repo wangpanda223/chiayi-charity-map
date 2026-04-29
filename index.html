@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <title>嘉邑行善團 · 橋見一甲子</title>
+    <!-- 引入地圖與聚合插件 -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
+    <style>
+        /* 中國古典風格設定 */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+        
+        body { 
+            font-family: "Noto Serif TC", "PMingLiU", "標楷體", serif; 
+            background: #f4eee1; /* 宣紙色 */
+            margin: 0; 
+            color: #332b2b;
+        }
+        .container { max-width: 1100px; margin: auto; padding: 40px 20px; }
+        
+        .header { text-align: center; margin-bottom: 40px; border-bottom: 2px inset #a68b5b; padding-bottom: 20px; }
+        .header h1 { font-size: 48px; color: #8e2323; margin: 10px 0; } /* 深紅色 */
+        .header h3 { letter-spacing: 5px; color: #a68b5b; margin: 0; }
+
+        .stats { display: flex; gap: 15px; margin-bottom: 30px; }
+        .stat { 
+            flex: 1; background: #fffcf5; padding: 15px; border: 1px solid #d4c5a1; 
+            border-radius: 4px; text-align: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+        }
+        .stat b { font-size: 24px; color: #8e2323; }
+
+        .content { display: flex; gap: 20px; margin-bottom: 20px; }
+        .map-box { width: 350px; background: #fffcf5; border: 1px solid #d4c5a1; padding: 10px; border-radius: 4px; }
+        #map { height: 400px; width: 100%; border-radius: 2px; }
+
+        .right-box { 
+            flex: 1; background: #fffcf5; border: 1px solid #d4c5a1; 
+            border-radius: 4px; padding: 25px; min-height: 350px;
+            background-image: radial-gradient(#eee 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; }
+        select, input { 
+            padding: 10px; border: 1px solid #d4c5a1; background: #fff; 
+            font-family: inherit; font-size: 16px;
+        }
+
+        table { width: 100%; border-collapse: collapse; background: white; border: 1px solid #d4c5a1; }
+        th { background: #8e2323; color: #fff; padding: 12px; font-weight: normal; }
+        td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        tr:hover { background: #fdf5e6; cursor: pointer; }
+
+        /* 聚合標記數字加大 */
+        .marker-cluster div { font-size: 18px !important; font-weight: bold; }
+        .footer { text-align: center; margin-top: 50px; color: #7a6e5a; font-size: 14px; border-top: 1px solid #d4c5a1; padding-top: 20px; }
+        
+        .btn-map { 
+            display: inline-block; margin-top: 15px; padding: 8px 20px; 
+            background: #8e2323; color: white; text-decoration: none; border-radius: 3px; 
+        }
+        .btn-map:hover { background: #b03030; }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+    <div class="header">
+        <h3>CHIAYI CHARITY · 嘉邑行善團</h3>
+        <h1>一甲子，跨千江</h1>
+        <p>「默默修橋，步步傳情。」記錄自民國五十四年起，行善團在台灣各地的每一座愛心橋樑。</p>
+    </div>
+
+    <div class="stats">
+        <div class="stat">總橋數<br><b id="total">0</b></div>
+        <div class="stat">已定位<br><b id="located">0</b></div>
+        <div class="stat">分布縣市<br><b id="cityCount">0</b></div>
+    </div>
+
+    <div class="controls">
+        <input id="search" placeholder="搜尋橋名 / 鄉鎮 / 村里" style="flex:1;">
+        <select id="cityFilter"><option value="">全部縣市</option></select>
+        <select id="townFilter"><option value="">全部鄉鎮</option></select>
+    </div>
+
+    <div style="margin-bottom:15px; color:#8e2323; font-weight: bold;">
+        區域統計：共 <span id="areaCount">0</span> 座橋
+    </div>
+
+    <div class="content">
+        <div class="map-box">
+            <div id="map"></div>
+        </div>
+        <div class="right-box" id="infoBox">
+            <div style="text-align:center; color:#999; margin-top:100px;">
+                請點擊圖針📍或下方表格查看橋樑詳情
+            </div>
+        </div>
+    </div>
+
+    <table id="table">
+        <thead>
+            <tr>
+                <th>編號</th>
+                <th>名稱</th>
+                <th>地點</th>
+                <th>落成日期</th>
+                <th>橋長(M)</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div class="footer">
+        © 嘉邑行善團 · 善意不必喧嘩，路會記得足跡
+    </div>
+</div>
+
+<script>
+// 初始化地圖 (Esri 穩定底圖)
+var map = L.map('map', { zoomSnap: 0.5 }).setView([23.7, 120.9], 7.5);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}').addTo(map);
+
+// 圖針 📍 圖示
+var pinIcon = L.divIcon({
+    className: 'custom-pin',
+    html: '<span style="font-size:24px;">📍</span>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 30]
+});
+
+var clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 40, 
+    showCoverageOnHover: false
+}).addTo(map);
+
+let allData = [];
+
+// 顯示資訊與 Google Map 連結
+function showInfo(b) {
+    let googleMapLink = b.lat && b.lng ? 
+        `https://www.google.com/maps/search/?api=1&query=${b.lat},${b.lng}` : 
+        `https://www.google.com/maps/search/?api=1&query=${b["縣市"]}${b["鄉鎮"]}${b.name}`;
+
+    document.getElementById("infoBox").innerHTML = `
+        <div style="border-left: 4px solid #8e2323; padding-left: 15px;">
+            <div style="color:#a68b5b; font-size:14px; margin-bottom:5px;">編號：${b["編號"] || "無"}</div>
+            <h2 style="margin:0 0 15px 0; color:#8e2323; font-size:28px;">${b.name || b.橋名}</h2>
+            <p><b>地點：</b>${b["縣市"]} ${b["鄉鎮"]} ${b["村里"] || ""}</p>
+            <p><b>落成：</b>民國 ${b.year || b.落成時間 || "不詳"}</p>
+            <p><b>長度：</b>${b["橋長(M)"] || 0} 公尺</p>
+            <a href="${googleMapLink}" target="_blank" class="btn-map">開啟 Google 地圖導航</a>
+        </div>
+    `;
+    
+    if(b.lat && b.lng) {
+        map.setView([b.lat, b.lng], 15);
+    }
+}
+
+function renderMap(data) {
+    clusterGroup.clearLayers();
+    let bounds = L.latLngBounds();
+    let hasData = false;
+
+    data.forEach(b => {
+        if (!b.lat || !b.lng || isNaN(parseFloat(b.lat))) return;
+        hasData = true;
+        let lat = parseFloat(b.lat);
+        let lng = parseFloat(b.lng);
+        let marker = L.marker([lat, lng], { icon: pinIcon });
+        marker.on("click", () => showInfo(b));
+        clusterGroup.addLayer(marker);
+        bounds.extend([lat, lng]);
+    });
+
+    // 自動縮放至該區域
+    if (hasData) {
+        map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 });
+    }
+}
+
+function renderTable(data) {
+    let tbody = document.querySelector("#table tbody");
+    tbody.innerHTML = "";
+    data.forEach(b => {
+        let tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${b["編號"] || ""}</td>
+            <td style="color:#8e2323; font-weight:bold;">${b.name || b.橋名}</td>
+            <td>${b["縣市"]}${b["鄉鎮"]}</td>
+            <td>${b.year || b.落成時間 || ""}</td>
+            <td>${b["橋長(M)"] || "0"}</td>
+        `;
+        tr.onclick = () => showInfo(b);
+        tbody.appendChild(tr);
+    });
+}
+
+function updateTownFilter(data) {
+    let towns = [...new Set(data.map(d => d["鄉鎮"]).filter(Boolean))].sort();
+    let select = document.getElementById("townFilter");
+    select.innerHTML = '<option value="">全部鄉鎮</option>';
+    towns.forEach(t => {
+        let opt = document.createElement("option");
+        opt.value = t; opt.text = t;
+        select.appendChild(opt);
+    });
+}
+
+function applyFilter() {
+    let keyword = document.getElementById("search").value.toLowerCase();
+    let city = document.getElementById("cityFilter").value;
+    let town = document.getElementById("townFilter").value;
+
+    let filtered = allData.filter(b => 
+        (!keyword || (b.name||"").includes(keyword) || (b["鄉鎮"]||"").includes(keyword) || (b["村里"]||"").includes(keyword)) &&
+        (!city || b["縣市"] === city) &&
+        (!town || b["鄉鎮"] === town)
+    );
+
+    renderMap(filtered);
+    renderTable(filtered);
+    document.getElementById("areaCount").innerText = filtered.length;
+}
+
+document.getElementById("search").addEventListener("input", applyFilter);
+document.getElementById("cityFilter").addEventListener("change", function() {
+    let city = this.value;
+    let filtered = city ? allData.filter(b => b["縣市"] === city) : allData;
+    updateTownFilter(filtered);
+    applyFilter();
+});
+document.getElementById("townFilter").addEventListener("change", applyFilter);
+
+// 讀取 Google Sheets 數據 (優化過的 OpenSheet API)
+fetch("https://opensheet.elk.sh/1mRLjRSEptZTALVLmmLTOZyzX8LhDH3uaj9-Xkw_DwO4/工作表1")
+.then(res => res.json())
+.then(data => {
+    allData = data.map(d => {
+        // 標準化欄位名稱，確保與程式碼一致
+        d.name = d.橋名 || d.名稱;
+        d.year = d.落成時間 || d.落成日期;
+        return d;
+    });
+
+    renderMap(allData);
+    renderTable(allData);
+    updateTownFilter(allData);
+
+    let cities = [...new Set(allData.map(d => d["縣市"]))].sort();
+    let select = document.getElementById("cityFilter");
+    cities.forEach(c => {
+        let opt = document.createElement("option");
+        opt.value = c; opt.text = c;
+        select.appendChild(opt);
+    });
+
+    let located = allData.filter(b => b.lat && !isNaN(parseFloat(b.lat))).length;
+    document.getElementById("total").innerText = allData.length;
+    document.getElementById("located").innerText = located;
+    document.getElementById("cityCount").innerText = cities.length;
+    document.getElementById("areaCount").innerText = allData.length;
+});
+</script>
+
+</body>
+</html>
